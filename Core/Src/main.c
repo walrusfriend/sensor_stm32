@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "i2c.h"
 #include "usart.h"
 #include "usb_device.h"
 #include "gpio.h"
@@ -26,6 +27,7 @@
 /* USER CODE BEGIN Includes */
 #include <stdbool.h>
 #include "usbd_cdc_if.h"
+#include "sht3x.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -103,25 +105,62 @@ int main(void)
   MX_GPIO_Init();
   MX_USART1_UART_Init();
   MX_USB_DEVICE_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
   HAL_UART_Receive_IT(&huart1, &uart_sym, 1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  // Create the handle for the sensor.
+  sht3x_handle_t handle = {
+      .i2c_handle = &hi2c1,
+//      .device_address = SHT3X_I2C_DEVICE_ADDRESS_ADDR_PIN_LOW
+      .device_address = SHT3X_I2C_DEVICE_ADDRESS_ADDR_PIN_HIGH
+  };
+
+  // Initialise sensor (tests connection by reading the status register).
+  if (!sht3x_init(&handle)) {
+      printf("SHT3x access failed.\n\r");
+  }
+
+//  // Read temperature and humidity.
+//  float temperature, humidity;
+//  sht3x_read_temperature_and_humidity(&handle, &temperature, &humidity);
+//  char str[256];
+//  sprintf(str, "Initial temperature: %.2fC, humidity: %.2f%%RH\n\r", temperature, humidity);
+
+  // Enable heater for two seconds.
+//  sht3x_set_header_enable(&handle, true);
+//  HAL_Delay(2000);
+//  sht3x_set_header_enable(&handle, false);
+
   while (1)
   {
-	  if (on_usb_data_ready) {
-		  HAL_UART_Transmit(&huart1, usb_buff, usb_received_data_size, 1000);
-		  on_usb_data_ready = false;
-	  }
+//	  if (on_usb_data_ready) {
+//		  HAL_UART_Transmit(&huart1, usb_buff, usb_received_data_size, 1000);
+//		  on_usb_data_ready = false;
+//	  }
+//
+//	  if (on_BLE_data_ready) {
+//		  CDC_Transmit_FS(BLE_buff, BLE_received_data_size);
+//		  BLE_received_data_size = 0;
+//		  on_BLE_data_ready = false;
+//	  }
 
-	  if (on_BLE_data_ready) {
-		  CDC_Transmit_FS(BLE_buff, BLE_received_data_size);
-		  BLE_received_data_size = 0;
-		  on_BLE_data_ready = false;
-	  }
+	  // Read temperature and humidity.
+    float temperature, humidity;
+	sht3x_read_temperature_and_humidity(&handle, &temperature, &humidity);
+	char str[256];
+//	sprintf(str, "Initial temperature: %.2fC, humidity: %.2f%%RH\n\r", temperature, humidity);
+	sprintf(str, "h%.2f", humidity);
 
+//	CDC_Transmit_FS(str, strlen(str));
+	HAL_UART_Transmit(&huart1, str, strlen(str), HAL_MAX_DELAY);
+
+//	sht3x_set_header_enable(&handle, true);
+	HAL_Delay(500);
+//	sht3x_set_header_enable(&handle, false);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
