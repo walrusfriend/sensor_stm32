@@ -42,7 +42,7 @@ bool sht3x_init(sht3x_handle_t *handle);
  * @param humidity Pointer to the storage location for the sampled humidity.
  * @return True on success, false otherwise.
  */
-bool sht3x_read_temperature_and_humidity(sht3x_handle_t *handle, float *temperature, float *humidity);
+bool sht3x_read_temperature_and_humidity(sht3x_handle_t *handle, uint16_t *temperature, uint16_t *humidity);
 
 /**
  * Turns the SHT3x's internal heater on or of.

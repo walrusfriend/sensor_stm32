@@ -71,7 +71,7 @@ bool sht3x_init(sht3x_handle_t *handle)
 	return true;
 }
 
-bool sht3x_read_temperature_and_humidity(sht3x_handle_t *handle, float *temperature, float *humidity)
+bool sht3x_read_temperature_and_humidity(sht3x_handle_t *handle, uint16_t *temperature, uint16_t *humidity)
 {
 	sht3x_send_command(handle, SHT3X_COMMAND_MEASURE_HIGHREP_STRETCH);
 
@@ -91,8 +91,8 @@ bool sht3x_read_temperature_and_humidity(sht3x_handle_t *handle, float *temperat
 	uint16_t temperature_raw = uint8_to_uint16(buffer[0], buffer[1]);
 	uint16_t humidity_raw = uint8_to_uint16(buffer[3], buffer[4]);
 
-	*temperature = -45.0f + 175.0f * (float)temperature_raw / 65535.0f;
-	*humidity = 100.0f * (float)humidity_raw / 65535.0f;
+	*temperature = -45 + 175 * temperature_raw / 65535;
+	*humidity = 100 * humidity_raw / 65535;
 
 	return true;
 }

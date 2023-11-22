@@ -20,13 +20,11 @@
 #include "main.h"
 #include "i2c.h"
 #include "usart.h"
-#include "usb_device.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdbool.h>
-#include "usbd_cdc_if.h"
 #include "sht3x.h"
 /* USER CODE END Includes */
 
@@ -52,27 +50,32 @@ typedef struct Sensor {
 	 int8_t temp;	// Temperature in Celsius
  } sensor;
 
-bool on_usb_data_ready = false;
-uint8_t usb_buff[BUFF_SIZE];
-uint16_t usb_received_data_size = 0;
+#define BUFF_SIZE 512
 
 bool on_BLE_data_ready = false;
 uint8_t BLE_buff[BUFF_SIZE];
 uint16_t BLE_received_data_size = 0;
 
 uint8_t uart_sym;
+bool is_heater_used = false;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-void BLE_init();
-void setup_BLE();
+void read_data_from_sensor();
+void send_error_message(const char* error_message) {
+	HAL_UART_Transmit(&huart1, error_message, strlen(error_message), 100);
+}
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+// Create the handle for the sensor.
+sht3x_handle_t handle = {
+	.i2c_handle = &hi2c1,
+	.device_address = SHT3X_I2C_DEVICE_ADDRESS_ADDR_PIN_HIGH
+};
 /* USER CODE END 0 */
 
 /**
@@ -104,63 +107,63 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART1_UART_Init();
-  MX_USB_DEVICE_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-  HAL_UART_Receive_IT(&huart1, &uart_sym, 1);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  // Create the handle for the sensor.
-  sht3x_handle_t handle = {
-      .i2c_handle = &hi2c1,
-//      .device_address = SHT3X_I2C_DEVICE_ADDRESS_ADDR_PIN_LOW
-      .device_address = SHT3X_I2C_DEVICE_ADDRESS_ADDR_PIN_HIGH
-  };
 
   // Initialise sensor (tests connection by reading the status register).
   if (!sht3x_init(&handle)) {
-      printf("SHT3x access failed.\n\r");
+	  send_error_message("SHT30 access failed\n");
   }
 
-//  // Read temperature and humidity.
-//  float temperature, humidity;
-//  sht3x_read_temperature_and_humidity(&handle, &temperature, &humidity);
-//  char str[256];
-//  sprintf(str, "Initial temperature: %.2fC, humidity: %.2f%%RH\n\r", temperature, humidity);
-
-  // Enable heater for two seconds.
-//  sht3x_set_header_enable(&handle, true);
-//  HAL_Delay(2000);
-//  sht3x_set_header_enable(&handle, false);
+  HAL_UART_Receive_IT(&huart1, &uart_sym, 1);
 
   while (1)
   {
-//	  if (on_usb_data_ready) {
-//		  HAL_UART_Transmit(&huart1, usb_buff, usb_received_data_size, 1000);
-//		  on_usb_data_ready = false;
-//	  }
-//
-//	  if (on_BLE_data_ready) {
-//		  CDC_Transmit_FS(BLE_buff, BLE_received_data_size);
-//		  BLE_received_data_size = 0;
-//		  on_BLE_data_ready = false;
-//	  }
+	  // Parse message
+	  if (on_BLE_data_ready) {
+		  /**
+		   * Commands:
+		   * d - read data from sensor and send it to BLE
+		   * r - restart MCU
+		   * h%d - enable/disable heater
+		   */
+		  if (BLE_buff[0] == 'd') {
+			  read_data_from_sensor();
+		  }
+		  else if (BLE_buff[0] == 'r') {
+			  NVIC_SystemReset();
+		  }
+		  else if (BLE_buff[0] == 'h') {
+			  if (BLE_received_data_size > 2) {
+				  if (BLE_buff[1] == '0') {
+					  is_heater_used = false;
+				  }
+				  else if (BLE_buff[1] == '1') {
+					  is_heater_used = true;
+				  }
+				  else {
+					  // TODO: Delete debug print
+					  send_error_message("Unknown heater argument\n");
+				  }
+			  }
+			  else {
+				  // TODO: Delete debug print
+				  send_error_message("Too few size\n");
+			  }
+		  }
+		  else {
+			  // TODO: Delete debug print
+			  send_error_message("Unknown command: ");
+			  send_error_message(BLE_buff);
+		  }
 
-	  // Read temperature and humidity.
-    float temperature, humidity;
-	sht3x_read_temperature_and_humidity(&handle, &temperature, &humidity);
-	char str[256];
-//	sprintf(str, "Initial temperature: %.2fC, humidity: %.2f%%RH\n\r", temperature, humidity);
-	sprintf(str, "h%.2f", humidity);
-
-//	CDC_Transmit_FS(str, strlen(str));
-	HAL_UART_Transmit(&huart1, str, strlen(str), HAL_MAX_DELAY);
-
-//	sht3x_set_header_enable(&handle, true);
-	HAL_Delay(500);
-//	sht3x_set_header_enable(&handle, false);
+		  on_BLE_data_ready = false;
+	  }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -176,7 +179,6 @@ void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
-  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
 
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
@@ -206,12 +208,6 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USB;
-  PeriphClkInit.UsbClockSelection = RCC_USBCLKSOURCE_PLL;
-  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
-  {
-    Error_Handler();
-  }
 }
 
 /* USER CODE BEGIN 4 */
@@ -219,54 +215,27 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 	// TODO Add check to string overflow
 
 	BLE_buff[BLE_received_data_size++] = uart_sym;
-	HAL_UART_Receive_IT(&huart1, &uart_sym, 1);
 	on_BLE_data_ready = true;
+	HAL_UART_Receive_IT(&huart1, &uart_sym, 1);
 }
 
-void BLE_init() {
-	/* Check that the BLE role is master (1) */
-	char role_check[] = "AT+ROLE";
-//	HAL_UART_Transmit(&huart1, pData, Size, Timeout);
+// Read temperature and humidity.
+void read_data_from_sensor() {
+	uint16_t temperature;
+	uint16_t humidity;
 
-	/* Wait for the answer */
-	uint32_t tickstart = HAL_GetTick();
-	while(on_BLE_data_ready == false) {
-		if ((HAL_GetTick() - tickstart) > HAL_MAX_DELAY) {
-			/* TODO Handle timeout error */
-			Error_Handler();
-		}
+	sht3x_read_temperature_and_humidity(&handle, &temperature, &humidity);
+
+	char str[16];
+	sprintf(str, "d:t%.2d,h%.2d", temperature, humidity);
+
+	if (is_heater_used) {
+		sht3x_set_header_enable(&handle, true);
+		HAL_Delay(500);
+		sht3x_set_header_enable(&handle, false);
 	}
 
-	/* Check the answer */
-
-
-	/*
-	 * AT+ROLE1
-	 * �?зменяем UUID сервиса и характеристики, если требуется
-	 * Настройка интревала опроса
-	 * AT+INQ - сканирование
-	 * �?щем MAC адрес хоста, сейчас это 0xA842E39054EA, потому это будет адрес второго BLE датчика99
-	 * По номеру позиции в таблице ответа подключаемся к хосту
-	 * Подключаемся к хосту
-	 * Мы готовы к работе!
-	 * При передаче данных приходит ответ TX!!
-	 *
-	 * PS По хорошему нужно ещё и скорость UART на 115200 поднять, хотя бы
-	 */
-}
-
-void setup_BLE() {
-	/*
-	 * Это режим настройки BLE соединения
-	 * В этом режиме мы парсим команды с СОМ порта
-	 * Если это АТ команда, то мы передаём её по UART в BLE модуль
-	 * Все остальные служебные команды обрабатываем как обычно
-	 *
-	 *
-	 * Есть вариант сделать так, чтобы АТ команды всегда кидались
-	 * в BLE модуль, надо подумац
-	 *
-	 */
+	HAL_UART_Transmit(&huart1, str, strlen(str), HAL_MAX_DELAY);
 }
 /* USER CODE END 4 */
 
