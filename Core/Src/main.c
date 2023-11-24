@@ -134,6 +134,7 @@ int main(void)
 		   */
 		  if (BLE_buff[0] == 'd') {
 			  read_data_from_sensor();
+			  BLE_received_data_size = 0;
 		  }
 		  else if (BLE_buff[0] == 'r') {
 			  NVIC_SystemReset();
@@ -155,11 +156,15 @@ int main(void)
 				  // TODO: Delete debug print
 				  send_error_message("Too few size\n");
 			  }
+
+			  BLE_received_data_size = 0;
 		  }
 		  else {
 			  // TODO: Delete debug print
 			  send_error_message("Unknown command: ");
 			  send_error_message(BLE_buff);
+
+			  BLE_received_data_size = 0;
 		  }
 
 		  on_BLE_data_ready = false;
