@@ -1,0 +1,15 @@
+../Core/Src/RingBuffer.c:47:19:ringbuf_new	16	static
+../Core/Src/RingBuffer.c:72:8:ringbuf_buffer_size	0	static
+../Core/Src/RingBuffer.c:80:6:ringbuf_free	8	static
+../Core/Src/RingBuffer.c:89:6:ringbuf_reset	0	static
+../Core/Src/RingBuffer.c:97:8:ringbuf_capacity	0	static
+../Core/Src/RingBuffer.c:105:8:ringbuf_bytes_free	0	static
+../Core/Src/RingBuffer.c:116:8:ringbuf_bytes_used	8	static
+../Core/Src/RingBuffer.c:120:5:ringbuf_is_full	8	static
+../Core/Src/RingBuffer.c:124:5:ringbuf_is_empty	8	static
+../Core/Src/RingBuffer.c:147:8:ringbuf_memset	32	static
+../Core/Src/RingBuffer.c:188:7:ringbuf_memcpy_into	40	static
+../Core/Src/RingBuffer.c:230:9:ringbuf_read	24	static
+../Core/Src/RingBuffer.c:271:7:ringbuf_memcpy_from	32	static
+../Core/Src/RingBuffer.c:314:9:ringbuf_write	24	static
+../Core/Src/RingBuffer.c:360:7:ringbuf_copy	48	static
