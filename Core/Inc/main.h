@@ -57,8 +57,10 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define BLE_BRK_Pin GPIO_PIN_11
-#define BLE_BRK_GPIO_Port GPIOB
+#define BLE_POWER_Pin GPIO_PIN_11
+#define BLE_POWER_GPIO_Port GPIOB
+#define BLE_STATE_Pin GPIO_PIN_8
+#define BLE_STATE_GPIO_Port GPIOA
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */
