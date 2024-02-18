@@ -37,6 +37,9 @@
 #define BLE_TIMEOUT_QUANTUM_MS 100
 #define BLE_MAX_CONNECTION_TRIES (1000 / BLE_TIMEOUT_QUANTUM_MS * 3) // 3 seconds
 
+// TODO Create an error code table
+const char SENSOR_UNAVAILABLE_ERROR_STR[] = "e:1";
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -51,10 +54,6 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-typedef struct Sensor {
-	 uint8_t hum;	// Humidity in %
-	 int8_t temp;	// Temperature in Celsius
- } sensor;
 
 /* USER CODE END PV */
 
@@ -62,8 +61,9 @@ typedef struct Sensor {
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
 void read_data_from_sensor();
-void ble_on();
-void ble_off();
+inline void ble_on();
+inline void ble_off();
+inline void sleep();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -76,6 +76,15 @@ sht3x_handle_t handle = {
 
 
 bool is_sensor_work = true;
+
+// TODO Test
+#define BUFF_SIZE 128
+
+bool on_BLE_data_ready = false;
+uint8_t BLE_buff[BUFF_SIZE];
+uint16_t BLE_received_data_size = 0;
+uint8_t uart_sym;
+
 /* USER CODE END 0 */
 
 /**
@@ -130,48 +139,79 @@ int main(void)
 
   ble_on();
 
-  // TODO Connect to host
-  const char connect_command[] = "AT+CO0FC45C3913196";
-  HAL_UART_Transmit(&huart1, connect_command, strlen(connect_command), 100);
+  // TODO Test IWDG period
+//  const char connect_command[] = "AT+CO0FC45C3913196";
+//  HAL_UART_Transmit(&huart1, connect_command, strlen(connect_command), 100);
 
-  HAL_IWDG_Refresh(&hiwdg); // Reset the WatchDog
+//  HAL_IWDG_Refresh(&hiwdg); // Reset the WatchDog
 
-  // Try to connect
-  for (uint8_t connection_counter = 0;
-	   connection_counter < BLE_MAX_CONNECTION_TRIES;
-	   ++connection_counter)
-  {
-	  if (HAL_GPIO_ReadPin(BLE_STATE_GPIO_Port, BLE_STATE_Pin)) {
-		  if (is_sensor_work) {
-			  // Read the data from the sensor and send it to the BLE
-			  read_data_from_sensor();
+  bool is_connected = false;
 
-			  // Analyze data
-			  // Change timer period
-		  }
-		  else {
-			  // Change timer period to max period
-		  }
-
-		  // Sleep
-		  HAL_PWR_EnterSTANDBYMode();
-	  }
+  // Wait for connect
+  for (uint8_t i = 0; i < BLE_MAX_CONNECTION_TRIES; ++i) {
+	  is_connected = HAL_GPIO_ReadPin(BLE_STATE_GPIO_Port, BLE_STATE_Pin);
 
 	  HAL_Delay(BLE_TIMEOUT_QUANTUM_MS);
+
+	  if (is_connected)
+		  break;
   }
 
-  // If couldn't connect go to low power checking mode - just try to connect every 26 seconds
-  // Set new prescaler and counter values for the IWDG
+  HAL_UART_Receive_IT(&huart1, &uart_sym, 1);
+
+  if (is_connected) {
+	  if (is_sensor_work) {
+//		  HAL_Delay(10000);
+		  // Read the data from the sensor and send it to the BLE
+//		  read_data_from_sensor();
+
+		  for (uint8_t i = 0; i < 10; ++i) {
+			  char str[6];
+			  snprintf(str, 6, "test%d", i);
+			  HAL_UART_Transmit(&huart1, str, 6, 100);
+			  HAL_Delay(100);
+		  }
+
+		  // TODO Analyze data
+//			  uint8_t step_value = (network.hum_max - network.hum_min) * 0.2;
+//
+//			  if (step_value < HUMIDITY_SENSOR_ACCURACY)
+//				  step_value = HUMIDITY_SENSOR_ACCURACY;
+//
+//			  if ((ble.curr_hum_value < network.hum_min + step_value) or
+//					  (ble.curr_hum_value > network.hum_max - step_value)) {
+//				  // Send requests every 5 secs
+//			  } else {
+//				  // Send requests every 30 secs
+//			  }
+
+		  // Check an atmosphere params and the user input and control the compressor relay
+//			  compare_hum();
+
+//			  ble.is_data_from_BLE_received = false;
+
+		  // Change timer period
+	  }
+	  else {
+		  // Change timer period to max period
+
+		  // Send an error
+		  HAL_UART_Transmit(&huart1, (uint8_t*)SENSOR_UNAVAILABLE_ERROR_STR,
+				  	  	    strlen(SENSOR_UNAVAILABLE_ERROR_STR), 100);
+	  }
+  }
+  else {
+	  // If couldn't connect go to low power checking mode - just try to connect every 26 seconds
+	  // Set new prescaler and counter values for the IWDG
+	  HAL_UART_Transmit(&huart1, (uint8_t*)"test",
+	  				  	  	    strlen("test"), 100);
+  }
 
 
-  // Sleep
-  HAL_PWR_EnterSTANDBYMode();
+  sleep();
 
   while (1)
   {
-#if USE_CLI == 1
-	  cli_process_command();
-#endif
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -191,14 +231,13 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSI|RCC_OSCILLATORTYPE_HSE;
-  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
-  RCC_OscInitStruct.HSEPredivValue = RCC_HSE_PREDIV_DIV1;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL6;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI_DIV2;
+  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL2;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -209,17 +248,25 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV4;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
   {
     Error_Handler();
   }
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+	// TODO Add check to string overflow
+
+	BLE_buff[BLE_received_data_size++] = uart_sym;
+	on_BLE_data_ready = true;
+	HAL_UART_Receive_IT(&huart1, &uart_sym, 1);
+}
+
 // Read temperature and humidity.
 void read_data_from_sensor() {
 	uint16_t temperature;
@@ -228,7 +275,7 @@ void read_data_from_sensor() {
 	sht3x_read_temperature_and_humidity(&handle, &temperature, &humidity);
 
 	char str[16];
-	snprintf(str, 16, "d:t%.2d,h%.2d", temperature, humidity);
+	snprintf(str, 16, "d:t%.2dh%.2d", temperature, humidity);
 
 //	if (is_heater_used) {
 //		sht3x_set_header_enable(&handle, true);
@@ -236,7 +283,7 @@ void read_data_from_sensor() {
 //		sht3x_set_header_enable(&handle, false);
 //	}
 
-	HAL_UART_Transmit(&huart1, str, strlen(str), HAL_MAX_DELAY);
+	HAL_UART_Transmit(&huart1, str, strlen(str), 100);
 }
 
 void ble_on() {
@@ -245,6 +292,11 @@ void ble_on() {
 
 void ble_off() {
 	HAL_GPIO_WritePin(BLE_POWER_GPIO_Port, BLE_POWER_Pin, GPIO_PIN_RESET);
+}
+
+void sleep() {
+//	ble_off();
+	HAL_PWR_EnterSTANDBYMode();
 }
 
 /* USER CODE END 4 */
