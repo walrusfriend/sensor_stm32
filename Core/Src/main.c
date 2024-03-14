@@ -172,7 +172,7 @@ int main(void)
 
 		  // Send payload
 		  const char test_arr[] = "Test message that arrived after gag array\n";
-		  HAL_UART_Transmit(&huart1, test_arr, sizeof(test_array), 100);
+		  HAL_UART_Transmit(&huart1, test_arr, sizeof(test_arr), 100);
 
 		  // Then wait for answer from Host
 
@@ -200,7 +200,7 @@ int main(void)
   }
 
 
-  sleep();
+//  sleep();
 
   while (1)
   {
