@@ -159,34 +159,26 @@ int main(void)
 
   HAL_UART_Receive_IT(&huart1, &uart_sym, 1);
 
+  static const char gag_array[40] = {'z'};
+
   if (is_connected) {
 	  if (is_sensor_work) {
-//		  HAL_Delay(10000);
 		  // Read the data from the sensor and send it to the BLE
 //		  read_data_from_sensor();
 
-		  for (uint8_t i = 0; i < 10; ++i) {
-			  char str[6];
-			  snprintf(str, 6, "test%d", i);
-			  HAL_UART_Transmit(&huart1, str, 6, 100);
-			  HAL_Delay(100);
-		  }
+		  // TODO Find out how to fix this bug
+		  // Send data to skip 40 bytes
+		  HAL_UART_Transmit(&huart1, gag_array, sizeof(gag_array), 100);
 
-		  // TODO Analyze data
-//			  uint8_t step_value = (network.hum_max - network.hum_min) * 0.2;
-//
-//			  if (step_value < HUMIDITY_SENSOR_ACCURACY)
-//				  step_value = HUMIDITY_SENSOR_ACCURACY;
-//
-//			  if ((ble.curr_hum_value < network.hum_min + step_value) or
-//					  (ble.curr_hum_value > network.hum_max - step_value)) {
-//				  // Send requests every 5 secs
-//			  } else {
-//				  // Send requests every 30 secs
-//			  }
+		  // Send payload
+		  const char test_arr[] = "Test message that arrived after gag array\n";
+		  HAL_UART_Transmit(&huart1, test_arr, sizeof(test_array), 100);
 
-		  // Check an atmosphere params and the user input and control the compressor relay
-//			  compare_hum();
+		  // Then wait for answer from Host
+
+		  // Change sleep param
+
+		  // Go to sleep
 
 //			  ble.is_data_from_BLE_received = false;
 
