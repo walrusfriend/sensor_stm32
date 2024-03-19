@@ -159,7 +159,12 @@ int main(void)
 
   HAL_UART_Receive_IT(&huart1, &uart_sym, 1);
 
-  static const char gag_array[40] = {'z'};
+  static const char gag_array[40] = {'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z',
+									  'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z',
+									  'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z',
+									  'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z'};
+
+  HAL_Delay(1000);
 
   if (is_connected) {
 	  if (is_sensor_work) {
@@ -171,8 +176,9 @@ int main(void)
 		  HAL_UART_Transmit(&huart1, gag_array, sizeof(gag_array), 100);
 
 		  // Send payload
-		  const char test_arr[] = "Test message that arrived after gag array\n";
-		  HAL_UART_Transmit(&huart1, test_arr, sizeof(test_arr), 100);
+//		  const char test_arr[] = "Test message that arrived after gag array\n";
+//		  HAL_UART_Transmit(&huart1, test_arr, sizeof(test_arr), 100);
+		  read_data_from_sensor();
 
 		  // Then wait for answer from Host
 
@@ -199,7 +205,10 @@ int main(void)
 	  				  	  	    strlen("test"), 100);
   }
 
+  // Wait until data has been arrived from BLE
+  HAL_Delay(1000);
 
+  ble_off();
 //  sleep();
 
   while (1)
