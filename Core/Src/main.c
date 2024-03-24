@@ -134,9 +134,6 @@ int main(void)
     * 	- ошибку, если датчик влажности не работает
     */
 
-  // Initialise sensor (tests connection by reading the status register).
-  is_sensor_work = sht3x_init(&handle);
-
   ble_on();
 
   // TODO Test IWDG period
@@ -159,28 +156,48 @@ int main(void)
 
   HAL_UART_Receive_IT(&huart1, &uart_sym, 1);
 
+  // Initialise sensor (tests connection by reading the status register).
+  is_sensor_work = sht3x_init(&handle);
+
   static const char gag_array[40] = {'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z',
 									  'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z',
 									  'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z',
 									  'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z'};
 
-  HAL_Delay(1000);
-
   if (is_connected) {
 	  if (is_sensor_work) {
+
+		  HAL_Delay(1000);
+
 		  // Read the data from the sensor and send it to the BLE
 //		  read_data_from_sensor();
 
 		  // TODO Find out how to fix this bug
+		  // If delay is 1000 ms after and before BLE transaction there is no 40 gag bit needed
 		  // Send data to skip 40 bytes
-		  HAL_UART_Transmit(&huart1, gag_array, sizeof(gag_array), 100);
+//		  HAL_UART_Transmit(&huart1, gag_array, sizeof(gag_array), 100);
 
 		  // Send payload
 //		  const char test_arr[] = "Test message that arrived after gag array\n";
 //		  HAL_UART_Transmit(&huart1, test_arr, sizeof(test_arr), 100);
 		  read_data_from_sensor();
 
+		  // TODO Add timeout
 		  // Then wait for answer from Host
+		  bool exit_flag = false;
+		  while (exit_flag == false) {
+			  if (on_BLE_data_ready) {
+				  if (BLE_buff[0] == 'S') {
+					  exit_flag = true;
+					  char tmp[50];
+					  sprintf(tmp, "Reply reached: %d\n\0", BLE_buff[2]);
+					  HAL_UART_Transmit(&huart1, tmp, sizeof(tmp), 100);
+				  }
+			  }
+			  HAL_Delay(500);
+			  HAL_UART_Transmit(&huart1, "request\n", sizeof("request\n"), 100);
+			  HAL_IWDG_Refresh(&hiwdg);
+		  }
 
 		  // Change sleep param
 
@@ -206,7 +223,7 @@ int main(void)
   }
 
   // Wait until data has been arrived from BLE
-  HAL_Delay(1000);
+  HAL_Delay(500);
 
   ble_off();
 //  sleep();
@@ -263,8 +280,15 @@ void SystemClock_Config(void)
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 	// TODO Add check to string overflow
 
-	BLE_buff[BLE_received_data_size++] = uart_sym;
-	on_BLE_data_ready = true;
+	if (uart_sym == 'S' ||
+		uart_sym == ':' ||
+		uart_sym == '1' ||
+		uart_sym == '2')
+	{
+		BLE_buff[BLE_received_data_size++] = uart_sym;
+		on_BLE_data_ready = true;
+	}
+
 	HAL_UART_Receive_IT(&huart1, &uart_sym, 1);
 }
 
