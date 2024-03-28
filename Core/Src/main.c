@@ -15,7 +15,9 @@
   *
   ******************************************************************************
   */
+
 /* USER CODE END Header */
+
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "i2c.h"
@@ -85,6 +87,12 @@ uint8_t BLE_buff[BUFF_SIZE];
 uint16_t BLE_received_data_size = 0;
 uint8_t uart_sym;
 
+extern uint32_t IWDG_prescaler;
+extern uint32_t IWDG_reload;
+
+const char request[] = "REQ\n";
+
+const uint8_t BLE_MAX_REQUESTS = 10;
 /* USER CODE END 0 */
 
 /**
@@ -148,10 +156,10 @@ int main(void)
   for (uint8_t i = 0; i < BLE_MAX_CONNECTION_TRIES; ++i) {
 	  is_connected = HAL_GPIO_ReadPin(BLE_STATE_GPIO_Port, BLE_STATE_Pin);
 
-	  HAL_Delay(BLE_TIMEOUT_QUANTUM_MS);
-
 	  if (is_connected)
 		  break;
+
+	  HAL_Delay(BLE_TIMEOUT_QUANTUM_MS);
   }
 
   HAL_UART_Receive_IT(&huart1, &uart_sym, 1);
@@ -159,56 +167,50 @@ int main(void)
   // Initialise sensor (tests connection by reading the status register).
   is_sensor_work = sht3x_init(&handle);
 
-  static const char gag_array[40] = {'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z',
-									  'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z',
-									  'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z',
-									  'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z', 'z'};
-
   if (is_connected) {
 	  if (is_sensor_work) {
 
 		  HAL_Delay(1000);
-
-		  // Read the data from the sensor and send it to the BLE
-//		  read_data_from_sensor();
-
-		  // TODO Find out how to fix this bug
-		  // If delay is 1000 ms after and before BLE transaction there is no 40 gag bit needed
-		  // Send data to skip 40 bytes
-//		  HAL_UART_Transmit(&huart1, gag_array, sizeof(gag_array), 100);
-
-		  // Send payload
-//		  const char test_arr[] = "Test message that arrived after gag array\n";
-//		  HAL_UART_Transmit(&huart1, test_arr, sizeof(test_arr), 100);
 		  read_data_from_sensor();
 
-		  // TODO Add timeout
 		  // Then wait for answer from Host
 		  bool exit_flag = false;
+		  uint8_t ble_current_request_count = 0;
 		  while (exit_flag == false) {
 			  if (on_BLE_data_ready) {
 				  if (BLE_buff[0] == 'S') {
 					  exit_flag = true;
-					  char tmp[50];
-					  sprintf(tmp, "Reply reached: %d\n\0", BLE_buff[2]);
-					  HAL_UART_Transmit(&huart1, tmp, sizeof(tmp), 100);
+
+					  if (BLE_buff[2] == '1') {
+						  // Set freq to 5 sec
+						  IWDG_prescaler = IWDG_PRESCALER_64;
+						  IWDG_reload = 3125;
+					  }
+					  else if (BLE_buff[2] == '2') {
+						  // Set freq to 26 sec
+						  IWDG_prescaler = IWDG_PRESCALER_256;
+						  IWDG_reload = 4095;
+					  }
+					  else {
+						  // Handle error
+					  }
 				  }
 			  }
-			  HAL_Delay(500);
-			  HAL_UART_Transmit(&huart1, "request\n", sizeof("request\n"), 100);
-			  HAL_IWDG_Refresh(&hiwdg);
+
+			  if (ble_current_request_count > BLE_MAX_REQUESTS) {
+				  // TODO Create an error "No response"
+				  break;
+			  }
+
+			  HAL_Delay(300);
+			  HAL_UART_Transmit(&huart1, request, sizeof(request), 100);
 		  }
-
-		  // Change sleep param
-
-		  // Go to sleep
-
-//			  ble.is_data_from_BLE_received = false;
-
-		  // Change timer period
 	  }
 	  else {
 		  // Change timer period to max period
+		  // Set freq to 26 sec
+		  IWDG_prescaler = IWDG_PRESCALER_256;
+		  IWDG_reload = 4095;
 
 		  // Send an error
 		  HAL_UART_Transmit(&huart1, (uint8_t*)SENSOR_UNAVAILABLE_ERROR_STR,
@@ -216,17 +218,16 @@ int main(void)
 	  }
   }
   else {
-	  // If couldn't connect go to low power checking mode - just try to connect every 26 seconds
-	  // Set new prescaler and counter values for the IWDG
-	  HAL_UART_Transmit(&huart1, (uint8_t*)"test",
-	  				  	  	    strlen("test"), 100);
+	  // If couldn't connect to BLE go to low power checking mode - just try to connect every 26 seconds
+	  // Set freq to 26 sec
+	  IWDG_prescaler = IWDG_PRESCALER_256;
+	  IWDG_reload = 4095;
   }
 
-  // Wait until data has been arrived from BLE
-  HAL_Delay(500);
+  // Apply new IWDG timer settings before sleep
+  MX_IWDG_Init();
 
-  ble_off();
-//  sleep();
+  sleep();
 
   while (1)
   {
@@ -292,6 +293,34 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 	HAL_UART_Receive_IT(&huart1, &uart_sym, 1);
 }
 
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
+	if (huart == &huart1) {
+		uint32_t er = HAL_UART_GetError(huart);
+
+		if (er == HAL_UART_ERROR_NONE) {
+			return;
+		}
+
+		if (er & HAL_UART_ERROR_PE) {
+			__HAL_UART_CLEAR_PEFLAG(huart);
+		}
+		if (er & HAL_UART_ERROR_NE) {
+			__HAL_UART_CLEAR_NEFLAG(huart);
+		}
+		if (er & HAL_UART_ERROR_FE) {
+			__HAL_UART_CLEAR_FEFLAG(huart);
+		}
+		if (er & HAL_UART_ERROR_ORE) {
+			__HAL_UART_CLEAR_OREFLAG(huart);
+		}
+		if (er & HAL_UART_ERROR_DMA) {
+			__HAL_UART_CLEAR_NEFLAG(huart);
+		}
+		huart->ErrorCode = HAL_UART_ERROR_NONE;
+		HAL_UART_Receive_IT(huart, (uint8_t*) &uart_sym, 1);
+ 	}
+ }
+
 // Read temperature and humidity.
 void read_data_from_sensor() {
 	uint16_t temperature;
@@ -320,7 +349,7 @@ void ble_off() {
 }
 
 void sleep() {
-//	ble_off();
+	ble_off();
 	HAL_PWR_EnterSTANDBYMode();
 }
 

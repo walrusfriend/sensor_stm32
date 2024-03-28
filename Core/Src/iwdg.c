@@ -21,7 +21,8 @@
 #include "iwdg.h"
 
 /* USER CODE BEGIN 0 */
-
+uint32_t IWDG_prescaler = IWDG_PRESCALER_256;
+uint32_t IWDG_reload = 4095;
 /* USER CODE END 0 */
 
 IWDG_HandleTypeDef hiwdg;
@@ -35,18 +36,25 @@ void MX_IWDG_Init(void)
   /* USER CODE END IWDG_Init 0 */
 
   /* USER CODE BEGIN IWDG_Init 1 */
-
+#if 0
   /* USER CODE END IWDG_Init 1 */
   hiwdg.Instance = IWDG;
   hiwdg.Init.Prescaler = IWDG_PRESCALER_256;
-//  hiwdg.Init.Reload = 4095;
-  hiwdg.Init.Reload = 800;
+  hiwdg.Init.Reload = 4095;
   if (HAL_IWDG_Init(&hiwdg) != HAL_OK)
   {
     Error_Handler();
   }
   /* USER CODE BEGIN IWDG_Init 2 */
+#endif
 
+  hiwdg.Instance = IWDG;
+  hiwdg.Init.Prescaler = IWDG_prescaler;
+  hiwdg.Init.Reload = IWDG_reload;
+  if (HAL_IWDG_Init(&hiwdg) != HAL_OK)
+  {
+    Error_Handler();
+  }
   /* USER CODE END IWDG_Init 2 */
 
 }
