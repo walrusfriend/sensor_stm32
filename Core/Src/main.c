@@ -39,6 +39,8 @@
 #define BLE_TIMEOUT_QUANTUM_MS 100
 #define BLE_MAX_CONNECTION_TRIES (1000 / BLE_TIMEOUT_QUANTUM_MS * 3) // 3 seconds
 
+#define BLE_30s_delay 4095 / 3
+
 // TODO Create an error code table
 const char SENSOR_UNAVAILABLE_ERROR_STR[] = "e:1";
 
@@ -189,7 +191,7 @@ int main(void)
 					  else if (BLE_buff[2] == '2') {
 						  // Set freq to 26 sec
 						  IWDG_prescaler = IWDG_PRESCALER_256;
-						  IWDG_reload = 4095;
+						  IWDG_reload = BLE_30s_delay;
 					  }
 					  else {
 						  // Handle error
@@ -210,7 +212,7 @@ int main(void)
 		  // Change timer period to max period
 		  // Set freq to 26 sec
 		  IWDG_prescaler = IWDG_PRESCALER_256;
-		  IWDG_reload = 4095;
+		  IWDG_reload = BLE_30s_delay;
 
 		  // Send an error
 		  HAL_UART_Transmit(&huart1, (uint8_t*)SENSOR_UNAVAILABLE_ERROR_STR,
@@ -221,7 +223,7 @@ int main(void)
 	  // If couldn't connect to BLE go to low power checking mode - just try to connect every 26 seconds
 	  // Set freq to 26 sec
 	  IWDG_prescaler = IWDG_PRESCALER_256;
-	  IWDG_reload = 4095;
+	  IWDG_reload = BLE_30s_delay;
   }
 
   // Apply new IWDG timer settings before sleep
