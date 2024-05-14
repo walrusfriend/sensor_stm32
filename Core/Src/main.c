@@ -17,7 +17,6 @@
   */
 
 /* USER CODE END Header */
-
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "i2c.h"
@@ -39,7 +38,8 @@
 #define BLE_TIMEOUT_QUANTUM_MS 100
 #define BLE_MAX_CONNECTION_TRIES (1000 / BLE_TIMEOUT_QUANTUM_MS * 3) // 3 seconds
 
-#define BLE_30s_delay 4095 / 3
+#define BLE_5s_delay_counter 3125;
+#define BLE_30s_delay_counter 4095 / 3
 
 // TODO Create an error code table
 const char SENSOR_UNAVAILABLE_ERROR_STR[] = "e:1";
@@ -75,7 +75,7 @@ inline void sleep();
 // Create the handle for the sensor.
 sht3x_handle_t handle = {
 	.i2c_handle = &hi2c1,
-	.device_address = SHT3X_I2C_DEVICE_ADDRESS_ADDR_PIN_HIGH
+	.device_address = SHT3X_I2C_DEVICE_ADDRESS_ADDR_PIN_LOW
 };
 
 
@@ -94,7 +94,7 @@ extern uint32_t IWDG_reload;
 
 const char request[] = "REQ\n";
 
-const uint8_t BLE_MAX_REQUESTS = 10;
+const uint8_t BLE_MAX_REQUESTS = 5;
 /* USER CODE END 0 */
 
 /**
@@ -186,12 +186,12 @@ int main(void)
 					  if (BLE_buff[2] == '1') {
 						  // Set freq to 5 sec
 						  IWDG_prescaler = IWDG_PRESCALER_64;
-						  IWDG_reload = 3125;
+						  IWDG_reload = BLE_5s_delay_counter;
 					  }
 					  else if (BLE_buff[2] == '2') {
 						  // Set freq to 26 sec
 						  IWDG_prescaler = IWDG_PRESCALER_256;
-						  IWDG_reload = BLE_30s_delay;
+						  IWDG_reload = BLE_30s_delay_counter;
 					  }
 					  else {
 						  // Handle error
@@ -204,6 +204,8 @@ int main(void)
 				  break;
 			  }
 
+			  ++ble_current_request_count;
+
 			  HAL_Delay(300);
 			  HAL_UART_Transmit(&huart1, request, sizeof(request), 100);
 		  }
@@ -212,7 +214,7 @@ int main(void)
 		  // Change timer period to max period
 		  // Set freq to 26 sec
 		  IWDG_prescaler = IWDG_PRESCALER_256;
-		  IWDG_reload = BLE_30s_delay;
+		  IWDG_reload = BLE_30s_delay_counter;
 
 		  // Send an error
 		  HAL_UART_Transmit(&huart1, (uint8_t*)SENSOR_UNAVAILABLE_ERROR_STR,
@@ -223,7 +225,7 @@ int main(void)
 	  // If couldn't connect to BLE go to low power checking mode - just try to connect every 26 seconds
 	  // Set freq to 26 sec
 	  IWDG_prescaler = IWDG_PRESCALER_256;
-	  IWDG_reload = BLE_30s_delay;
+	  IWDG_reload = BLE_30s_delay_counter;
   }
 
   // Apply new IWDG timer settings before sleep
