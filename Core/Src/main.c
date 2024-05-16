@@ -43,6 +43,7 @@
 
 // TODO Create an error code table
 const char SENSOR_UNAVAILABLE_ERROR_STR[] = "e:1";
+const char BLE_NO_RESPONSE_FROM_HOST[] = "e:2";
 
 /* USER CODE END PTD */
 
@@ -64,7 +65,8 @@ const char SENSOR_UNAVAILABLE_ERROR_STR[] = "e:1";
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-void read_data_from_sensor();
+inline void prepare_and_send_data();
+inline void wait_reply_from_host();
 inline void ble_on();
 inline void ble_off();
 inline void sleep();
@@ -76,6 +78,7 @@ inline void sleep();
 sht3x_handle_t handle = {
 	.i2c_handle = &hi2c1,
 	.device_address = SHT3X_I2C_DEVICE_ADDRESS_ADDR_PIN_LOW
+//	.device_address = SHT3X_I2C_DEVICE_ADDRESS_ADDR_PIN_HIGH
 };
 
 
@@ -146,12 +149,6 @@ int main(void)
 
   ble_on();
 
-  // TODO Test IWDG period
-//  const char connect_command[] = "AT+CO0FC45C3913196";
-//  HAL_UART_Transmit(&huart1, connect_command, strlen(connect_command), 100);
-
-//  HAL_IWDG_Refresh(&hiwdg); // Reset the WatchDog
-
   bool is_connected = false;
 
   // Wait for connect
@@ -173,42 +170,9 @@ int main(void)
 	  if (is_sensor_work) {
 
 		  HAL_Delay(1000);
-		  read_data_from_sensor();
+		  prepare_and_send_data();
 
-		  // Then wait for answer from Host
-		  bool exit_flag = false;
-		  uint8_t ble_current_request_count = 0;
-		  while (exit_flag == false) {
-			  if (on_BLE_data_ready) {
-				  if (BLE_buff[0] == 'S') {
-					  exit_flag = true;
-
-					  if (BLE_buff[2] == '1') {
-						  // Set freq to 5 sec
-						  IWDG_prescaler = IWDG_PRESCALER_64;
-						  IWDG_reload = BLE_5s_delay_counter;
-					  }
-					  else if (BLE_buff[2] == '2') {
-						  // Set freq to 26 sec
-						  IWDG_prescaler = IWDG_PRESCALER_256;
-						  IWDG_reload = BLE_30s_delay_counter;
-					  }
-					  else {
-						  // Handle error
-					  }
-				  }
-			  }
-
-			  if (ble_current_request_count > BLE_MAX_REQUESTS) {
-				  // TODO Create an error "No response"
-				  break;
-			  }
-
-			  ++ble_current_request_count;
-
-			  HAL_Delay(300);
-			  HAL_UART_Transmit(&huart1, request, sizeof(request), 100);
-		  }
+		  wait_reply_from_host();
 	  }
 	  else {
 		  // Change timer period to max period
@@ -326,14 +290,19 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
  }
 
 // Read temperature and humidity.
-void read_data_from_sensor() {
+void prepare_and_send_data() {
 	uint16_t temperature;
 	uint16_t humidity;
+	uint8_t battery_charge;
 
 	sht3x_read_temperature_and_humidity(&handle, &temperature, &humidity);
 
-	char str[16];
-	snprintf(str, 16, "d:t%.2dh%.2d", temperature, humidity);
+	// Read battery charge
+	battery_charge = 88;
+
+	const uint8_t str_size = 19;
+	char str[str_size];
+	snprintf(str, str_size, "d:t%.2dh%.2db%.2d", temperature, humidity, battery_charge);
 
 //	if (is_heater_used) {
 //		sht3x_set_header_enable(&handle, true);
@@ -344,12 +313,58 @@ void read_data_from_sensor() {
 	HAL_UART_Transmit(&huart1, str, strlen(str), 100);
 }
 
+void wait_reply_from_host() {
+	bool exit_flag = false;
+	uint8_t ble_current_request_count = 0;
+	while (exit_flag == false) {
+		if (on_BLE_data_ready) {
+			if (BLE_buff[0] == 'S') {
+				exit_flag = true;
+
+				if (BLE_buff[2] == '1') {
+					// Set freq to 5 sec
+					IWDG_prescaler = IWDG_PRESCALER_64;
+					IWDG_reload = BLE_5s_delay_counter;
+				}
+				else if (BLE_buff[2] == '2') {
+					// Set freq to 26 sec
+					IWDG_prescaler = IWDG_PRESCALER_256;
+					IWDG_reload = BLE_30s_delay_counter;
+				}
+				else {
+				    // Handle error
+				}
+			}
+		}
+
+		// Timeout
+		if (ble_current_request_count > BLE_MAX_REQUESTS) {
+			HAL_UART_Transmit(&huart1, (uint8_t*)BLE_NO_RESPONSE_FROM_HOST,
+							strlen(BLE_NO_RESPONSE_FROM_HOST), 100);
+			break;
+		}
+
+		++ble_current_request_count;
+
+		HAL_Delay(300);
+		HAL_UART_Transmit(&huart1, request, sizeof(request), 100);
+	}
+}
+
 void ble_on() {
-	HAL_GPIO_WritePin(BLE_POWER_GPIO_Port, BLE_POWER_Pin, GPIO_PIN_SET);
+	// Setup GPIO pin in output push-pull mode
+	BLE_POWER_GPIO_Port->CRH |= GPIO_CRH_MODE11_0;
+
+//	HAL_GPIO_WritePin(BLE_POWER_GPIO_Port, BLE_POWER_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(BLE_POWER_GPIO_Port, BLE_POWER_Pin, GPIO_PIN_RESET);
 }
 
 void ble_off() {
-	HAL_GPIO_WritePin(BLE_POWER_GPIO_Port, BLE_POWER_Pin, GPIO_PIN_RESET);
+	// Setup GPIO pin in analog
+	BLE_POWER_GPIO_Port->CRH &= ~GPIO_CRH_MODE11;
+
+//	HAL_GPIO_WritePin(BLE_POWER_GPIO_Port, BLE_POWER_Pin, GPIO_PIN_RESET);
+//	HAL_GPIO_WritePin(BLE_POWER_GPIO_Port, BLE_POWER_Pin, GPIO_PIN_SET);
 }
 
 void sleep() {
