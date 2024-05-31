@@ -38,12 +38,12 @@
 #define BLE_TIMEOUT_QUANTUM_MS 100
 #define BLE_MAX_CONNECTION_TRIES (1000 / BLE_TIMEOUT_QUANTUM_MS * 3) // 3 seconds
 
-#define BLE_5s_delay_counter 3125;
-#define BLE_30s_delay_counter 4095 / 3
+#define BLE_5s_delay_counter 3125
+#define BLE_30s_delay_counter 4095
 
 // TODO Create an error code table
-const char SENSOR_UNAVAILABLE_ERROR_STR[] = "e:1";
-const char BLE_NO_RESPONSE_FROM_HOST[] = "e:2";
+const char SENSOR_UNAVAILABLE_ERROR_STR[] = "e:1\n";
+const char BLE_NO_RESPONSE_FROM_HOST[] = "e:2\n";
 
 /* USER CODE END PTD */
 
@@ -172,7 +172,42 @@ int main(void)
 		  HAL_Delay(1000);
 		  prepare_and_send_data();
 
-		  wait_reply_from_host();
+//		  wait_reply_from_host();
+		  bool exit_flag = false;
+		uint8_t ble_current_request_count = 0;
+		while (exit_flag == false) {
+			if (on_BLE_data_ready) {
+				if (BLE_buff[0] == 'S') {
+					exit_flag = true;
+
+					if (BLE_buff[2] == '1') {
+						// Set freq to 5 sec
+						IWDG_prescaler = IWDG_PRESCALER_64;
+						IWDG_reload = BLE_5s_delay_counter;
+					}
+					else if (BLE_buff[2] == '2') {
+						// Set freq to 26 sec
+						IWDG_prescaler = IWDG_PRESCALER_256;
+						IWDG_reload = BLE_30s_delay_counter;
+					}
+					else {
+						// Handle error
+					}
+				}
+			}
+
+			// Timeout
+			if (ble_current_request_count > BLE_MAX_REQUESTS) {
+//				HAL_UART_Transmit(&huart1, (uint8_t*)BLE_NO_RESPONSE_FROM_HOST,
+//								strlen(BLE_NO_RESPONSE_FROM_HOST), 100);
+				break;
+			}
+
+			++ble_current_request_count;
+
+			HAL_Delay(300);
+			HAL_UART_Transmit(&huart1, request, sizeof(request), 100);
+		}
 	  }
 	  else {
 		  // Change timer period to max period
@@ -302,7 +337,7 @@ void prepare_and_send_data() {
 
 	const uint8_t str_size = 19;
 	char str[str_size];
-	snprintf(str, str_size, "d:t%.2dh%.2db%.2d", temperature, humidity, battery_charge);
+	snprintf(str, str_size, "d:t%.2dh%.2db%.2d\n", temperature, humidity, battery_charge);
 
 //	if (is_heater_used) {
 //		sht3x_set_header_enable(&handle, true);
@@ -314,41 +349,41 @@ void prepare_and_send_data() {
 }
 
 void wait_reply_from_host() {
-	bool exit_flag = false;
-	uint8_t ble_current_request_count = 0;
-	while (exit_flag == false) {
-		if (on_BLE_data_ready) {
-			if (BLE_buff[0] == 'S') {
-				exit_flag = true;
-
-				if (BLE_buff[2] == '1') {
-					// Set freq to 5 sec
-					IWDG_prescaler = IWDG_PRESCALER_64;
-					IWDG_reload = BLE_5s_delay_counter;
-				}
-				else if (BLE_buff[2] == '2') {
-					// Set freq to 26 sec
-					IWDG_prescaler = IWDG_PRESCALER_256;
-					IWDG_reload = BLE_30s_delay_counter;
-				}
-				else {
-				    // Handle error
-				}
-			}
-		}
-
-		// Timeout
-		if (ble_current_request_count > BLE_MAX_REQUESTS) {
-			HAL_UART_Transmit(&huart1, (uint8_t*)BLE_NO_RESPONSE_FROM_HOST,
-							strlen(BLE_NO_RESPONSE_FROM_HOST), 100);
-			break;
-		}
-
-		++ble_current_request_count;
-
-		HAL_Delay(300);
-		HAL_UART_Transmit(&huart1, request, sizeof(request), 100);
-	}
+//	bool exit_flag = false;
+//	uint8_t ble_current_request_count = 0;
+//	while (exit_flag == false) {
+//		if (on_BLE_data_ready) {
+//			if (BLE_buff[0] == 'S') {
+//				exit_flag = true;
+//
+//				if (BLE_buff[2] == '1') {
+//					// Set freq to 5 sec
+//					IWDG_prescaler = IWDG_PRESCALER_64;
+//					IWDG_reload = BLE_5s_delay_counter;
+//				}
+//				else if (BLE_buff[2] == '2') {
+//					// Set freq to 26 sec
+//					IWDG_prescaler = IWDG_PRESCALER_256;
+//					IWDG_reload = BLE_30s_delay_counter;
+//				}
+//				else {
+//				    // Handle error
+//				}
+//			}
+//		}
+//
+//		// Timeout
+//		if (ble_current_request_count > BLE_MAX_REQUESTS) {
+//			HAL_UART_Transmit(&huart1, (uint8_t*)BLE_NO_RESPONSE_FROM_HOST,
+//							strlen(BLE_NO_RESPONSE_FROM_HOST), 100);
+//			break;
+//		}
+//
+//		++ble_current_request_count;
+//
+//		HAL_Delay(300);
+//		HAL_UART_Transmit(&huart1, request, sizeof(request), 100);
+//	}
 }
 
 void ble_on() {
@@ -357,6 +392,8 @@ void ble_on() {
 
 //	HAL_GPIO_WritePin(BLE_POWER_GPIO_Port, BLE_POWER_Pin, GPIO_PIN_SET);
 	HAL_GPIO_WritePin(BLE_POWER_GPIO_Port, BLE_POWER_Pin, GPIO_PIN_RESET);
+
+	HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
 }
 
 void ble_off() {
@@ -365,11 +402,13 @@ void ble_off() {
 
 //	HAL_GPIO_WritePin(BLE_POWER_GPIO_Port, BLE_POWER_Pin, GPIO_PIN_RESET);
 //	HAL_GPIO_WritePin(BLE_POWER_GPIO_Port, BLE_POWER_Pin, GPIO_PIN_SET);
+
+	HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
 }
 
 void sleep() {
 	ble_off();
-	HAL_PWR_EnterSTANDBYMode();
+//	HAL_PWR_EnterSTANDBYMode();
 }
 
 /* USER CODE END 4 */

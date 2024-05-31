@@ -57,6 +57,8 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define LED_Pin GPIO_PIN_13
+#define LED_GPIO_Port GPIOC
 #define BLE_POWER_Pin GPIO_PIN_11
 #define BLE_POWER_GPIO_Port GPIOB
 #define BLE_STATE_Pin GPIO_PIN_8
